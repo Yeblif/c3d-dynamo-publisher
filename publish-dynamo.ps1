@@ -92,7 +92,8 @@ foreach ($repo in $repos) {
     $out = Join-Path $tmpRoot $repo.Name
     git -C $r archive --format=zip -o $zip $tag
     if ($LASTEXITCODE -ne 0) { Add-Result 'ERROR (archive)' '-' $repo.Name $tag; continue }
-    Expand-Archive -Path $zip -DestinationPath $out -Force
+    try   { Expand-Archive -Path $zip -DestinationPath $out -Force -ErrorAction Stop }
+    catch { Add-Result 'ERROR (extract)' '-' $repo.Name $tag; continue }
 
     $dyns = Get-ChildItem -Path $out -Filter '*.dyn' -File   # repo root only
     if (-not $dyns) { Add-Result 'No .dyn at tag' '-' $repo.Name $tag; continue }
@@ -104,16 +105,23 @@ foreach ($repo in $repos) {
         $seen[$f.Name] = $repo.Name
         $dest = Join-Path $DestRoot $f.Name
 
-        if (-not (Test-Path $dest)) {
-            Copy-Item $f.FullName $dest -Force
-            Add-Result 'New' $f.Name $repo.Name $tag
+        # Only report success if the copy actually worked (e.g. file open/locked in Dynamo)
+        try {
+            if (-not (Test-Path $dest)) {
+                Copy-Item $f.FullName $dest -Force -ErrorAction Stop
+                Add-Result 'New' $f.Name $repo.Name $tag
+            }
+            elseif ((Get-FileHash $f.FullName).Hash -ne (Get-FileHash $dest -ErrorAction Stop).Hash) {
+                Copy-Item $f.FullName $dest -Force -ErrorAction Stop
+                Add-Result 'Updated' $f.Name $repo.Name $tag
+            }
+            else {
+                Add-Result 'Unchanged' $f.Name $repo.Name $tag
+            }
         }
-        elseif ((Get-FileHash $f.FullName).Hash -ne (Get-FileHash $dest).Hash) {
-            Copy-Item $f.FullName $dest -Force
-            Add-Result 'Updated' $f.Name $repo.Name $tag
-        }
-        else {
-            Add-Result 'Unchanged' $f.Name $repo.Name $tag
+        catch {
+            Add-Result 'ERROR (copy - file open?)' $f.Name $repo.Name $tag
+            Write-Host "  Could not publish $($f.Name): $($_.Exception.Message)" -ForegroundColor Red
         }
     }
 }

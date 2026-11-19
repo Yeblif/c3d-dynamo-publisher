@@ -13,3 +13,4 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - Replaces the old `publish_dynamo.bat`, which copied the newest `.dyn` on disk whether finished or not and compared by file date.
 
 ### Fixed
+- A graph that fails to copy (e.g. open in Dynamo) is reported as an error instead of New/Updated, and is not listed as live in `_versions.txt`.
